@@ -1,0 +1,14 @@
+xiffview contrib folder
+=======================
+
+Contributions, additional files, etc. for xiffview build and usage.
+No responsibility is taken, use at your own risk. 
+
+pics/
+	testpattern.iff
+		test pattern image, 320x256 pixels, 16 colors.
+
+s_haubenthal/
+	Makefile
+		generic makefile for xiffview, by S. Haubenthal.
+		(with kind permission on 27 Sep 2021 - thank u very much!)
