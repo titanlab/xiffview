@@ -6,6 +6,8 @@
 Simple picture viewer for Linux/X, displays 2- to 256-color
 IFF ILBM pictures in a window on your X screen. v0.6: Most features are supported except animations.
 
+![Bildschirmfoto vom 2024-07-19 08-18-08](https://github.com/user-attachments/assets/767a7cc0-f455-4f8c-83cc-425d88fb812f)
+
 ## Usage
 
     xiffview [options] filename
