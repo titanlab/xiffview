@@ -14,16 +14,12 @@
 #include <X11/Xutil.h>
 #include <X11/Xos.h>
 
-#ifdef DEBUG
-#include "../../../lib-c/debug.h"
-#else
-#include "debug_none.h"
-#endif
+#include "debug.h"
 #include "usermsg.h"
 #include "app.h"
 #include "types.h"
 #include "rgb.h"
-#include "iff_load_ilbm.h" 
+#include "iff_load_ilbm.h"
 #include "cmd.h"
 #include "gui.h"
 
@@ -33,11 +29,11 @@ struct appdata appdata_mem;
 struct appdata *appdata = &appdata_mem;
 
 // BitMapHeader is from iff_load_ilbm.h
-BitMapHeader        *iff_bmh = NULL; 
+BitMapHeader        *iff_bmh = NULL;
 // BitMap is from types.h
 struct BitMap       *img_bm = NULL;
 // AmigaOS colortable (large enough to hold any number of colors)
-UWORD               img_colortable_rgb4[IFF_ILBM_COLORS_MAX];
+ULONG               img_colortable[IFF_ILBM_COLORS_MAX];
 // bordersize around image
 int border = 20;
 
@@ -84,13 +80,7 @@ void freeplanes(struct BitMap *b) {
 
 int main(int argc, char **argv) {
 
-//UWORD foo = 0x8000;
-//printf("0x%04x\n", foo);
-//printf("0x%02x", 0x80);
-//printf("0x%04x", foo);
-//return EXIT_SUCCESS;
-
-	int i, numcolors;
+	int i;
 	int mode = MODE_DEFAULT;
 	int opt_cmd = 0;
 	int opt_outfile = 0;
@@ -101,6 +91,8 @@ int main(int argc, char **argv) {
 		appdata->gui_image_bitplane_enable[i] = 1;
 	}
 	appdata->gui_image_scale = 1;
+    appdata->gui_image_12bpp_mode = 0;
+    appdata->gui_image_fix_flicker = 1;
 
 #ifdef DEBUG
 	types_check();
@@ -185,18 +177,22 @@ int main(int argc, char **argv) {
 			img_bm = (struct BitMap *) malloc(sizeof(struct BitMap));
 			if (img_bm) {
 				img_bm->Depth = iff_bmh->nPlanes;
-				img_bm->BytesPerRow = iff_bmh->w/8;
+				img_bm->BytesPerRow = iff_bmh->w / 16;
+                if(iff_bmh->w % 16 != 0) {
+                    img_bm->BytesPerRow++;
+                }
+                img_bm->BytesPerRow *= 2;
 				img_bm->Rows = iff_bmh->h;
-				numcolors = 1 << img_bm->Depth;
+                img_bm->Flags = 0;
 
 				if (allocplanes(img_bm)) {
 					//debugmsg("planes alloc'd");
-					if (iff_load_ilbm(appdata->filename, img_bm, img_colortable_rgb4, iff_bmh)) {
+					if (iff_load_ilbm(appdata->filename, img_bm, img_colortable, iff_bmh)) {
 						debugmsg("iff loaded");
 
                         if (mode == MODE_CMD) {
 							// Command mode / no image display / CLI operation
-							cmd_exec(appdata, img_bm, img_colortable_rgb4, iff_bmh);
+							cmd_exec(appdata, img_bm, img_colortable, iff_bmh);
 
                         } else {
 							// GUI mode / image display
@@ -208,7 +204,7 @@ int main(int argc, char **argv) {
 									usererr("sorry, must be truecolor display", NULL);
 								}
 
-								gui_setimage(appdata->filename, img_bm, img_colortable_rgb4, numcolors);
+								gui_setimage(appdata->filename, img_bm, img_colortable);
 
 								if (gui_open()) {
 									gui_mainloop();
@@ -246,7 +242,7 @@ int main(int argc, char **argv) {
 	//rgb4torgb8(0x00f0, &a, &b, &c);
 	//rgb4torgb8(0x000f, &a, &b, &c);
 	//printf("rgb: %d %d %d", (int) a, (int) b, (int) c);
-	
+
 	//exit(EXIT_SUCCESS);
 	return EXIT_SUCCESS; // pretty much zero. but EXIT_SUCCESS kinda feels better.
 }

@@ -6,15 +6,11 @@
  * https://www.yvonrozijn.nl/aweb/apl.txt
 */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef DEBUG
-#include "../../../lib-c/debug.h"
-#else
-#include "debug_none.h"
-#endif
-
+#include "debug.h"
 #include "usermsg.h"
 #include "bytereverse.h"
 #include "types.h"
@@ -28,7 +24,7 @@
 #define ID_ILBM              MAKE_ID('I', 'L', 'B', 'M')
 #define ID_BMHD              MAKE_ID('B', 'M', 'H', 'D')
 #define ID_CMAP              MAKE_ID('C', 'M', 'A', 'P')
-//#define ID_CAMG              MAKE_ID('C', 'A', 'M', 'G')
+#define ID_CAMG              MAKE_ID('C', 'A', 'M', 'G')
 //#define ID_DPI               MAKE_ID('D', 'P', 'I', ' ')
 #define ID_BODY              MAKE_ID('B', 'O', 'D', 'Y')
 
@@ -80,11 +76,12 @@ ULONG iff_load_ilbm_compressed(struct IFFHandle *iff, struct BitMap *bm, LONG si
 	ULONG bytebuflw;
 	UBYTE *mem;
 	ULONG *memlw;
-	ULONG done = 0L;
+	ULONG done = 0L, done_old = 0L;
 	int offset = 0;
 	int ok = 1;
 	int lines = bmh->h;
 	int planes = bmh->nPlanes;
+    int masking = bmh->Masking;
 	debugmsg("iff_load_ilbm_compressed() - lines: %d - planes: %d", lines, planes);
 
 	UBYTE *body = malloc(size); // keep body for free()
@@ -101,21 +98,34 @@ ULONG iff_load_ilbm_compressed(struct IFFHandle *iff, struct BitMap *bm, LONG si
 		return done;
 	}
 	//debugmsg("iff_load_ilbm_compressed() - read %ld body bytes", num);
-	
+
+    if(masking == 1) {
+        planes++;
+    }
+
 	// for each scanline...
 	for (i = 0; i < lines; i++) {
 		// ...loop though planes:
 		for (j = 0; j < planes; j++) {
-			mem = (UBYTE *) bm->Planes[j];
-			mem += offset;
+            int write = 1;
 
-			//debugmsg("decompressing %d %d", i, j);
+            if(masking == 1 && j == planes-1) {
+                write = 0;
+            }
+
+            if(write) {
+                mem = (UBYTE *) bm->Planes[j];
+                mem += offset;
+            }
+
+			//printf("decompressing %d %d %d %d -> %d (%d)\n", i, j, iff_scanline_len, done_old, done, done - done_old);
+            done_old = done;
 			int todo_scanline = iff_scanline_len;
 			//int safety = 0;
 			// while scanline needs bytes...
 			while (todo_scanline > 0) {
 				/* ...get a byte, call it N (= our bytebuf) */
-				bytebuf = *body_ptr; body_ptr++; 
+				bytebuf = *body_ptr; body_ptr++;
 				done++;
 				if (bytebuf & 0x80) {
 					//debugmsg("bytebuf negative: %d", bytebuf);
@@ -123,22 +133,22 @@ ULONG iff_load_ilbm_compressed(struct IFFHandle *iff, struct BitMap *bm, LONG si
 						//debugmsg("bytebuf >= -127 and <= -1: %d", bytebuf);
 						/* byte >= -127 and <= -1: repeat the next byte -N+1 times */
 						k = (int) -bytebuf+1;
-						bytebuf = *body_ptr; body_ptr++; 
+						bytebuf = *body_ptr; body_ptr++;
 						done++;
 
 						int uselw = 1;
 						/*
 						Mon 14 Jun 2021 11:42:32 AM CEST
-						linux / intel seems to be able to access any memory address as 
+						linux / intel seems to be able to access any memory address as
 						longword, so we don't need to check for word boundaries or so.
 						(until we create some Amiga version, of course. maybe.)
 
 						int uselw = 0;
-						if ((unsigned long) mem % 2) { 
-							//debugmsg("byte is: 0x%02x - mem 0x%08x -> uneven, must use bytes", bytebuf, (unsigned long) mem); 
-						} else { 
+						if ((unsigned long) mem % 2) {
+							//debugmsg("byte is: 0x%02x - mem 0x%08x -> uneven, must use bytes", bytebuf, (unsigned long) mem);
+						} else {
 							//debugmsg("byte is: 0x%02x - mem 0x%08x -> even, trying longwords...", bytebuf, (unsigned long) mem);
-							//uselw = 1; 
+							//uselw = 1;
 						}
 						*/
 
@@ -149,18 +159,23 @@ ULONG iff_load_ilbm_compressed(struct IFFHandle *iff, struct BitMap *bm, LONG si
 							((char *) &bytebuflw)[1] = bytebuf;
 							((char *) &bytebuflw)[2] = bytebuf;
 							((char *) &bytebuflw)[3] = bytebuf;
+
 							memlw = (ULONG *) mem;
 							while (k >= 4) {
-								*memlw = bytebuflw;
-								memlw++;
+								if(write) {
+                                    *memlw = bytebuflw;
+								    memlw++;
+                                }
 								todo_scanline -= 4;
 								k -= 4;
 							}
 							mem = (UBYTE *) memlw;
 						}
 						while (k) {
-							*mem = bytebuf;
-							mem++;
+							if(write) {
+                                *mem = bytebuf;
+							    mem++;
+                            }
 							todo_scanline--;
 							k--;
 						}
@@ -172,25 +187,20 @@ ULONG iff_load_ilbm_compressed(struct IFFHandle *iff, struct BitMap *bm, LONG si
 					/* byte >= 0 and <= 127: copy the next N+1 bytes literally */
 					bytebuf++;
 					//debugmsg("copy literally: line: %d plane: %d - bytes (n+1): %d", i, j, bytebuf);
-					memcpy(mem, body_ptr, (LONG) bytebuf);
+					if(write) {
+                        memcpy(mem, body_ptr, (LONG) bytebuf);
+					    mem += bytebuf;
+                    }
 					body_ptr += bytebuf;
 					done += (LONG) bytebuf;
 					todo_scanline -= (int) bytebuf;
-					mem += bytebuf;
 				}
-
-				/*
-				safety++;            // safety
-				if (safety > 1000) { // safety
-					debugerr("iff_load() - emergency exit, todo_scanline still > 0!(comp)");
-					ok = 0; break;   // safety
-				}                    // safety
-				*/
 			}
 		}
 		offset += iff_scanline_len;
 	}
-	free(body); // free body, not body_ptr
+
+	free(body);
 	return done;
 }
 
@@ -227,7 +237,7 @@ int iff_load_ilbm_header(char *filepath, BitMapHeader *bmh) {
 					bytereverse((char *) &bmh->TransparentColor, 2);
 					bytereverse((char *) &bmh->PageWidth, 2);
 					bytereverse((char *) &bmh->PageHeight, 2);
-					//debugmsg("BMHD: PageWidth/Height\t= %ld/%ld", bmh->PageWidth, bmh->PageHeight);
+					//printf("BMHD: PageWidth/Height\t= %ld/%ld\n", bmh->PageWidth, bmh->PageHeight);
 					//debugmsg("BMHD: Compression\t= %d",           bmh->Compression);
 					ok = 1;
 				} else {
@@ -254,7 +264,7 @@ from given filepath, using information stored in given BitMapHeader
 bitmap must be set up to hold image data, otherwise error
 */
 
-int iff_load_ilbm(char *filepath, struct BitMap *bm, UWORD *colortable, BitMapHeader *bmh) {
+int iff_load_ilbm(char *filepath, struct BitMap *bm, ULONG *colortable, BitMapHeader *bmh) {
 	//debugmsg("iff_load()");
 	int ret = 0;
 	int ok = 1;
@@ -280,10 +290,41 @@ int iff_load_ilbm(char *filepath, struct BitMap *bm, UWORD *colortable, BitMapHe
 		if (!error) {
 
 			PropChunk(iff, ID_ILBM, ID_CMAP);
-			//PropChunk(iff, ID_ILBM, ID_CAMG);
+			PropChunk(iff, ID_ILBM, ID_CAMG);
 			//PropChunk(iff, ID_ILBM, ID_DPI);
 			StopChunk(iff, ID_ILBM, ID_BODY);
 			ParseIFF(iff, IFFPARSE_SCAN);
+
+            // CAMG
+			if (sprop = FindProp (iff, ID_ILBM, ID_CAMG)) {
+                if(sprop->sp_Size > 0) {
+                    ULONG * data = sprop->sp_Data;
+                    bytereverse((char *)data, 4);
+
+                    if(data[0] & 0x4) {
+                        bm->Flags |= LACE;
+                    }
+
+                    if(data[0] & 0x80) {
+                        bm->Flags |= EHB;
+                    }
+
+                    if(data[0] & 0x800) {
+                        bm->Flags |= HAM;
+                    }
+
+                    if(data[0] & 0x8000) {
+                        bm->Flags |= HIRES;
+                    }
+
+                    // PAL, NTSC or Default monitor? -> NATIVE
+                    if(((data[0] & 0xffff1000) == 0x00011000) ||
+                       ((data[0] & 0xffff1000) == 0x00021000) ||
+                       ((data[0] & 0xffff1000) == 0x00000000)) {
+                        bm->Flags |= NATIVE;
+                    }
+                }
+            }
 
 			// CMAP
 			// rgb, 8 bit, left aligned 4-bit value (double to 8 bit when writing)
@@ -297,28 +338,26 @@ int iff_load_ilbm(char *filepath, struct BitMap *bm, UWORD *colortable, BitMapHe
 						// each component left aligned 4-bit value.
 						mem = sprop->sp_Data;
 						UBYTE byte;
-						UWORD rgb4;
-						for (j = 0; j < (1 << bm->Depth); j++) {
+						ULONG rgb;
+						for (j = 0; j < (1 << bm->Depth - (bm->Flags & EHB ? 1 : 0)); j++) {
 							if (j < i) {
 								// red (at blue position)
 								byte = *mem; //printf("r: 0x%02x ", byte);
-								rgb4 = 0 | (byte >> 4);
-								rgb4 = rgb4 << 4;
+								rgb = byte << 16;
 								mem++;
 								// green (at blue position, red at green)
 								byte = *mem; //printf("g: 0x%02x ", byte);
-								rgb4 = rgb4 | (byte >> 4);
-								rgb4 = rgb4 << 4;
+								rgb |= byte << 8;
 								mem++;
 								// blue (red at red, green at green, nice)
 								byte = *mem; //printf("b: 0x%02x ", byte);
-								rgb4 = rgb4 | (byte >> 4);
+                                rgb |= byte;
 								mem++;
 							} else {
-								rgb4 = 0x0000;
+								rgb = 0x00000000;
 							}
-							colortable[j] = rgb4; // ok, copy to our colortable
-							//printf("-> rgb4: 0x%04x\n", colortable[j]);
+							colortable[j] = rgb; // ok, copy to our colortable
+							//printf("-> rgb8: 0x%08x\n", colortable[j]);
 						}
 
 					} else {
@@ -332,10 +371,7 @@ int iff_load_ilbm(char *filepath, struct BitMap *bm, UWORD *colortable, BitMapHe
 			} else {
 				debugerr("iff_load() - no colormap");
 				ok = 0;
-			} 
-
-			//if (sprop = FindProp (iff, ID_ILBM, ID_CAMG)) { }
-			//if (sprop = FindProp (iff, ID_ILBM, ID_DPI)) { }
+			}
 
 			if (ok) {
 				struct ContextNode *cn = CurrentChunk(iff);
@@ -344,8 +380,14 @@ int iff_load_ilbm(char *filepath, struct BitMap *bm, UWORD *colortable, BitMapHe
 
 					LONG size = cn->cn_Size;
 					debugmsg("iff_load_ilbm() - body size: %d", size);
-					iff_scanline_len = bmh->w / 8; // 8 = 1 byte
-					if (bmh->Compression == cmpNone) {
+
+                    iff_scanline_len = bmh->w / 16;
+                    if((bmh->w % 16) != 0) {
+                        iff_scanline_len++;
+                    }
+                    iff_scanline_len*=2;
+
+                    if (bmh->Compression == cmpNone) {
 						size -= (LONG) iff_load_ilbm_uncompressed(iff, bm, bmh);
 					} else if (bmh->Compression == cmpByteRun1) {
 						debugmsg("iff_load() - loading...");
@@ -356,8 +398,8 @@ int iff_load_ilbm(char *filepath, struct BitMap *bm, UWORD *colortable, BitMapHe
 					}
 
 					if (size != 0) {
-						debugerr("iff_load() - still some bytes to go! %d", size);
-						ok = 0;
+						printf("iff_load() - still some bytes to go! %d\n", size);
+						//ok = 0;
 					}
 				} else {
 					char *c = (char *) &cn->cn_Type;

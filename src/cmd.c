@@ -10,17 +10,12 @@
 #include <stdio.h>
 #include <string.h>
 
-#ifdef DEBUG
-#include "../../../lib-c/debug.h"
-#else
-#include "debug_none.h"
-#endif
+#include "debug.h"
 #include "usermsg.h"
 #include "app.h"
 #include "types.h"
 #include "iff_load_ilbm.h"
 #include "cmd.h"
-
 
 char cmd_string[APP_CMD_STRING_MAXLEN];  // the entire command string (from CLI args)
 char cmd_command[APP_CMD_STRING_MAXLEN]; // the command portion of command string
@@ -34,7 +29,7 @@ int cmd_args_int[16];
 struct {
 	struct appdata      *appdata;
 	struct BitMap       *img_bm;
-	UWORD               *img_colormap_rgb4;
+	ULONG               *img_colormap;
 	BitMapHeader        *iff_bmh;
 } cmd_data;
 
@@ -63,14 +58,14 @@ int cmd_exec_to_sprite(int args[]) {
 	if (!strlen(cmd_data.appdata->filename_output)) {
 		debugmsg("using to-sprite default filename: %s", CMD_COMMAND_TO_SPRITE_FILENAME_DEFAULT);
 		strcpy(cmd_data.appdata->filename_output, CMD_COMMAND_TO_SPRITE_FILENAME_DEFAULT);
-	} 
+	}
 
 	if (height < 1 || height > 256) {
 		ret = 0; usererr("height (number of lines) out of bounds", NULL);
 	}
 	if (x % 8) {
 		ret = 0; usererr("x coordinate must be multiple of 8", NULL);
-	} 
+	}
 	if (x < 0 || y < 0) {
 		ret = 0; usererr("x and y coordinates must be non-negative", NULL);
 	}
@@ -115,7 +110,7 @@ int cmd_exec_to_sprite(int args[]) {
 				// put our two (a/b) bitplane numbers into array for loop below:
 				//int bitplane[2]; bitplane[0] = bitplane_a; bitplane[1] = bitplane_b;
 
-				// size of WORD (not BYTE) array is: 
+				// size of WORD (not BYTE) array is:
 				// (number of lines (1 line = 1 WORD = 16 pixels) * number of bitplanes) + 2 for termination
 				fprintf(f, "WORD __chip sprite_xSPRITENAMEx_bitplanes[%d+2] = {\n", height * 2);
 
@@ -146,9 +141,16 @@ int cmd_exec_to_sprite(int args[]) {
 				fprintf(f, "\t");
 				i = 0;
 				for (i = 0; i < 3; i++) {
-					if (i) 
+                    ULONG rgb;
+                    UWORD rgb4;
+
+					if (i)
 						fprintf(f, ", ");
-					fprintf(f, "0x%04x", cmd_data.img_colormap_rgb4[pen[i]]);
+
+                    rgb = cmd_data.img_colormap[pen[i]];
+                    rgb4 = ((rgb >> 12) & 0xf00) | ((rgb >> 8) & 0xf0) | ((rgb >> 4) & 0xf);
+
+					fprintf(f, "0x%04x", rgb4);
 				}
 				fprintf(f, "\n};\n\n");
 
@@ -174,15 +176,15 @@ int cmd_exec_to_sprite(int args[]) {
 }
 
 // appdata->cmdstring will be copied to (global) cmd_string - must fit memory!
-int cmd_exec(struct appdata *ad, struct BitMap *img_bm, UWORD *img_colormap_rgb4, BitMapHeader *iff_bmh) {
+int cmd_exec(struct appdata *ad, struct BitMap *img_bm, ULONG *img_colormap, BitMapHeader *iff_bmh) {
 	int ret = 0;
 	char *tok;
 	int i;
 
-	cmd_data.appdata           = ad;
-	cmd_data.img_bm            = img_bm;
-	cmd_data.img_colormap_rgb4 = img_colormap_rgb4;
-	cmd_data.iff_bmh           = iff_bmh;
+	cmd_data.appdata      = ad;
+	cmd_data.img_bm       = img_bm;
+	cmd_data.img_colormap = img_colormap;
+	cmd_data.iff_bmh      = iff_bmh;
 
 	sprintf(cmd_delimiters, CMD_DELIMITERS_STRING);
 

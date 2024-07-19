@@ -9,9 +9,12 @@
 struct ximage_data {
 	int scale;
 	char *bitplane_enable;
+    int ocs;
+    int field;
+    int fix_flicker;
 };
 
-// BitMap pointer, colortable_rgb4, ximage_data pointer, Display, Visual, Screen
-XImage *ximage_create(struct BitMap *, UWORD *, struct ximage_data *, Display *, Visual *, int);
+// BitMap pointer, colortable, ximage_data pointer, Display, Visual, Screen
+XImage *ximage_create(struct BitMap *, ULONG *, struct ximage_data *, Display *, Visual *, int);
 // XImage * (NULL is allowed)
 void   ximage_free(XImage *);

@@ -19,12 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef DEBUG
-#include "../../../lib-c/debug.h"
-#else
-#include "debug_none.h"
-#endif
-
+#include "debug.h"
 #include "usermsg.h"
 #include "bytereverse.h"
 #include "types.h"
@@ -45,7 +40,7 @@ int iffparse_readbytes(FILE *f, char *mem, int size) {
 	return bytes_read;
 }
 
-// index is index of propchunk that matched 
+// index is index of propchunk that matched
 int iffparse_storeproperty(struct IFFHandle *ih, int index, int size) {
 	debugmsg("iffparse_storeproperty() - index: %d - size: %d", index, size);
 	int ok = 0;
@@ -59,7 +54,7 @@ int iffparse_storeproperty(struct IFFHandle *ih, int index, int size) {
 		} else {
 			free(mem);
 		}
-	} 
+	}
 	return ok;
 }
 
@@ -165,13 +160,15 @@ LONG ParseIFF(struct IFFHandle *ih, LONG control) {
 								debugmsg("found propchunk: type: %c%c%c%c - id: %c%c%c%c", ca[0], ca[1], ca[2], ca[3], cb[0], cb[1], cb[2], cb[3]);
 								// read chunk bytes & store the chunk
 								if (iffparse_storeproperty(ih, i, chk_size)) {
-									stored = 1;
+                                    ih->propchunk[i].cn_Size = chk_size;
+                                    stored = 1;
 								} else {
 									if (feof(f)) err = IFFERR_EOF;
 									break;
 								}
 							}
 						}
+
 						if (ih->stopchunk.cn_Type == form_type && ih->stopchunk.cn_ID == chk_id) {
 							ca = (char *) &ih->stopchunk.cn_Type;
 							cb = (char *) &ih->stopchunk.cn_ID;
@@ -186,7 +183,7 @@ LONG ParseIFF(struct IFFHandle *ih, LONG control) {
 						}
 
 						if (!stored) {
-							fseek(f, chk_size, SEEK_CUR);
+                            fseek(f, chk_size, SEEK_CUR);
 						}
 
 						if (chk_size & 1) {
@@ -274,7 +271,9 @@ void CloseIFF(struct IFFHandle *ih) {
 	int i = ih->propchunk_count;
 	while (i) {
 		i--;
-		free(ih->storedprop[i].sp_Data);
+        if(ih->propchunk[i].cn_Size > 0) {
+		    free(ih->storedprop[i].sp_Data);
+        }
 	}
 }
 
@@ -288,7 +287,7 @@ BPTR Open(STRPTR filepath, LONG mode) {
 			mode_str[1] = '+';
 			mode_str[2] = 0;
 			if (mode == MODE_OLDFILE) {
-				// open existing file 
+				// open existing file
 				stream = (BPTR) fopen(filepath, mode_str);
 				debugmsg("file opened (MODE_OLDFILE), stream: 0x%016x", stream);
 			}
@@ -319,6 +318,7 @@ BOOL Close(BPTR stream) {
 struct IFFHandle *AllocIFF() {
 	debugmsg("AllocIFF()");
 	struct IFFHandle *ih = malloc(sizeof(struct IFFHandle));
+    memset(ih, 0, sizeof(struct IFFHandle));
 	return ih;
 }
 

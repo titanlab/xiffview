@@ -7,4 +7,4 @@
 */
 
 // appdata, bitmap struct, colormap, iff ilbm bitmap header struct
-int cmd_exec(struct appdata *, struct BitMap *, UWORD *, BitMapHeader *);
+int cmd_exec(struct appdata *, struct BitMap *, ULONG *, BitMapHeader *);

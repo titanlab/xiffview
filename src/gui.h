@@ -11,7 +11,7 @@ int  gui_open(void);
 void gui_close(void);
 void gui_delete(void);
 void gui_mainloop(void);
-void gui_setimage(char *, struct BitMap *, UWORD *, int);
+void gui_setimage(char *, struct BitMap *, ULONG *);
 void gui_redraw(void);
 Display *gui_getDisplay(void);
 Visual *gui_getVisual(void);

@@ -23,4 +23,4 @@ typedef struct {
 } BitMapHeader;
 
 int iff_load_ilbm_header(char *, BitMapHeader *);
-int iff_load_ilbm(char *, struct BitMap *, UWORD *, BitMapHeader *);
+int iff_load_ilbm(char *, struct BitMap *, ULONG *, BitMapHeader *);
